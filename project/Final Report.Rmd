@@ -1,0 +1,469 @@
+---
+html_document:
+  df_print: paged
+author: "Eric Chagnon"
+date: 
+output:
+  html_document:
+    df_print: paged
+geometry: margin = 0.5in
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{longtable}
+- \usepackage{array}
+- \usepackage{multirow}
+- \usepackage{wrapfig}
+- \usepackage{float}
+- \usepackage{colortbl}
+- \usepackage{pdflscape}
+- \usepackage{tabu}
+- \usepackage{threeparttable}
+- \usepackage{threeparttablex}
+- \usepackage[normalem]{ulem}
+- \usepackage{makecell}
+- \usepackage{xcolor}
+title: "GNI: Gross National Infections" 
+keep_tex: no
+number_sections: no
+editor_options:
+  chunk_output_type: console
+subtitle: "An analysis on the relationship between a countries success metrics and the amount of its citizens that died to Covid-19"
+documentclass: article
+urlcolor: blue
+---
+  
+<!-- The above is set to automatically compile to a .pdf file.   -->
+<!-- It will only succeed if LaTeX is installed. -->
+  
+<!-- If you absolutely can't get LaTeX installed and/or working, then you can compile to a .html first,  -->
+<!-- by clicking on the arrow button next to knit and selecting Knit to HTML. -->
+
+<!-- You must then print you .html file to a .pdf by using first opening it in a web browser and then printing to a .pdf -->
+
+
+```{r setup, include=FALSE}
+# This is the setup chunk
+#  Here you can set global options for the entire document
+
+library(knitr) # I recommend doing this here
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+
+# Although you can call functions from a library using the following notation
+#  without loading the entire library.
+knitr::opts_chunk$set(echo = TRUE, 
+                      comment = NA, # Required
+                      fig.path = "./figures/",  # Store all figures here in relative path (make the folder first)
+                      fig.align = "center",
+                      fig.width = 7,
+                      fig.height = 7,
+                      message = FALSE, # Turn off load messages
+                      warning = FALSE # Turn off warnings
+                      )
+
+```
+
+\clearpage
+
+```{r include=FALSE}
+setwd("~/Documents/UCDavis/Winter2022/STA207/project/")
+data = read.csv("data/final_data.csv")
+numeric_data = read.csv("data/final_numeric_data.csv")
+# You should not echo this chunk.
+# include=FALSE does more than echo=FALSE, it actually does: echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.show='hide'
+
+# You should set your working directory at the very beginning of your R Markdown file
+# setwd("~/Dropbox/teaching/FA2020/CMDA_4654/homework/homework1/")
+
+# In linux ~/ is shorthand for /home/username/
+# You should type things out properly for your system
+# Mac: /Users/username/Documents/CMDA4654/Lectures/Lecture_03/.../
+# Windows: C:/Users/username/Documents/etc/Lecture/Lecture_03/.../
+
+
+```
+
+
+
+
+# Abstract 
+
+In a global pandemic one of a country's top priorities should be ensuring the safety of its citizens. The goal of this paper is to try and examine the differences in countries who better protected their citizens against the deadly Covid-19 pandemic. To accomplish this the percentage Gross National Income (GNI) and the Literacy of countries were examined against the Percentage of the Population the died to Covid-19. A two-way ANOVA model was built with the Percentage Dead as the response and the GNI and Literacy rate as the treatment effects. In this model the effect of GNI was the only significant one, however the model also violated the assumptions required for ANOVA. Therefore, subsequent non-parametric models were created with the ranks of the Percent Dead as the new response variable, and GNI and Literacy Rate as the respective treatment effects. This resulted in 2 models with individual significant effects, concluding that the Literacy Rate and GNI of a country have an effect of the Percentage of Citizens that died to Covid-19. 
+
+
+# Introduction
+The Coronavirus pandemic that started in 2019 has had a lasting impact on the world. As of writing this report over 5.9 million people lost their lives to the Coronavirus, better known as Covid-19. Covid-19 affected each country differently, this could be due to a multitude of things like vaccination rates, differences in mandated public health policies, public opinion on Covid-19, etc. The goal of this paper is to try and determine how well a country protected its citizens from the pandemic by analyzing countries' health metrics. In order for large and small countries to be compared more fairly, the response variables used will be the percentage of the country's population that died from Covid-19, and the predictor variables will be Gross National Income (GNI), and the Literacy Rate.
+
+# Background
+
+Something every person on the planet has learned over the past few years is that Covid-19 does not discriminate. At the time of writing this paper the pandemic has been going on for nearly 3 years, which has given ample time for researchers to try and understand the differences between countries that allow them to have such different mortality rates. According to the World Bank in 2020 while the people living in developing countries made up 85\% of the global population, they only accounted for about 21\% of the cumulative deaths worldwide (Schellekens, 2020). This is not an intuitive phenomenon, as the logical assumption to make is that wealthier, more developed countries, would have far more resources to protect their citizens from Covid-19. Now that more time has passed, and Covid-19 has continued to ravage the planet, maybe this is no longer the case. 
+
+
+The data sources for this project consist of the World Health Organization (WHO), the World Bank, and the Central Intelligence Agency (CIA). The WHO maintains a Covid-19 dashboard that updates daily cases and deaths for countries around the world and keeps a count of cumulative deaths and cases starting from January 3, 2020. The CIA maintains a dataset for metrics of individual countries such as GPD, Area, Net Migration, etc. and is available on Kaggle. Samples of the 3 datasets can be seen below. 
+```{r, echo=FALSE}
+who = read_csv("https://covid19.who.int/WHO-COVID-19-global-data.csv")
+who_last_day = who[which(who$Date_reported == as.Date("2022-03-02", "%Y-%d-%m")),]
+who_last_day = who_last_day[,c(3,8)] #237 rows
+
+cia = read.csv("data/CIA_Country_Facts.csv")
+gni = gni_raw = read.csv("data/gni.csv", sep=",", header = TRUE)
+
+head(who)
+head(cia)
+head(gni)
+```
+
+The variables we are interested in for this project are the Cumulative Deaths from the WHO dataset, the Literacy Rate from the CIA dataset, and the GNI from the World Bank dataset. A moderate amount of data cleaning is required to obtain the final dataset used in building the model. First, since the WHO data is a time series model, and only the final Cumulative Deaths variables is necessary, all data collected prior to the final day was dropped. Next, there were some naming disparities between the datasets on certain countries. Some examples can be seen below:
+
+```{r, echo=FALSE}
+c(who_last_day[8,1], cia[8,1])
+c(who_last_day[15,1], cia[15,1], gni[24,1])
+c(who_last_day[227,1], cia[215,1], gni[252,1])
+```
+
+In order to obtain the response variable the Cumulative Deaths of each country from the WHO dataset is divided by the country's Population from the CIA dataset. This provides a percentage of the population that had Covid-19 related deaths. Secondly, the GNI of each country from the World Bank dataset, the Literacy Rate from the CIA dataset, and the new response variable need to be joined together via an inner join on the country name. After removing NA values, the final amount dataset contains 157 countries. A sample of the final dataset can be seen below:
+
+```{r, echo=FALSE}
+head(numeric_data[,-3])
+```
+
+# Descriptive Analysis
+
+The distribution and summary statistics of the treatment effects can be seen below: 
+
+```{r,echo=FALSE}
+gni_five = fivenum(numeric_data$GNI)
+literacy_five = fivenum(numeric_data$Literacy....)
+summary_stats = as.data.frame(rbind(gni_five, literacy_five))
+summary_stats$Mean = c(mean(numeric_data$GNI), mean(numeric_data$Literacy....))
+summary_stats$Std_Dev = c(sd(numeric_data$GNI), sd(numeric_data$Literacy....))
+colnames(summary_stats) = c("Min", "Lower Quartile", "Median", "Upper Quartile", "Max", "Mean", "Standard Deviation")
+summary_stats
+
+ggplot(data=numeric_data, aes(x = GNI)) + geom_histogram() + ggtitle("Figure 1: Histogram of GNI")
+
+ggplot(data=numeric_data, aes(x = Literacy....)) + geom_histogram() + ggtitle("Figure 2: Histogram of Literacy Rate")
+
+
+```
+
+The GNI values of countries are heavily skewed to the right with most countries having a GNI below $20,000$. The Literacy Rate is quite the opposite, being heavily skewed to the left, and most countries having a literacy rate greater than $80\%$. 
+
+In order for ANOVA to take place the treatment effects need to be in factor form. The GNI treatment effect was split in the same way the World Bank categorizes countries. The GNI factor has 4 levels: Low, Medium-Low, Medium-High, and High as per (Hamadeh, et. al, 2020), and the Literacy Rate was splitting into three categories: Low, Medium, and High as per (World Population Review, 2022). The amount of countries in each level of GNI and Literacy rate can be seen in the table below:
+
+```{r, echo=FALSE, warning=FALSE}
+table(data$gni, data$literacy)
+```
+
+The literacy rate was split into three categories: Low, Medium, and High. The distributions of the GNI and the Literacy Rates of each country can be seen in the figures below.
+
+
+```{r, echo=FALSE}
+ggplot(data=data, aes(x = gni, y = percentDead, fill = gni)) + geom_boxplot() + ggtitle("Figure 3: Percentage Dead by GNI")
+
+ggplot(data=data, aes(x = literacy, y = percentDead, fill = literacy)) + geom_boxplot() + ggtitle("Figure 4: Percentage Dead by Literacy Rate")
+
+```
+
+From the above Figures it seems as though the countries with Low GNI and Low Literacy rate have the smallest mean of Percentage of Population Deaths. 
+
+# Predictive/Inferential Anaysis
+Before a model is built, the necessity of an interaction term has to be determined. From the below interaction plots, it is evident that average Percentage of Population that died to Covid-19 follows a similar trend for both GNI and Literacy Rate, and therefore the interaction term is not necessary in the model. 
+
+```{r, echo=FALSE}
+interaction.plot(x.factor = data$gni, trace.factor = data$literacy, response = data$percentDead, main="Figure 5: Interaction Plot of GNI and Literacy Rate")
+```
+
+In order to determine the effects of GNI and Literacy rate on the Percentage of Population Deaths, and two-way ANOVA model was constructed with the form:
+$$Y_{i,j,k} = \mu + \alpha_i + \beta_j + \epsilon_{i,j,k}, i = 1,...,4, j = 1,..,3, k = 1,2,...,n_{i,j}$$
+Where $\alpha_i$ satisfies $\Sigma^{4}_{i=1}\alpha_i=0$, $\beta_j$ satisfies $\Sigma^{3}_{j=1}\beta_j=0$, and $\epsilon_{i,j,k}$ are i.i.d $N(0,\sigma^2)$.
+
+In this model $\mu$ is the average Percentage of a county's population that died to Covid-19, $\alpha_i$ is the main effect of GNI, and $\beta_j$ is the main effect of Literacy Rate.
+
+
+```{r, echo=FALSE}
+aov.fit = aov(data = data, percentDead ~ gni + literacy)
+anova(aov.fit)
+```
+
+Here it is evident that Literacy Rate does not have a significant effect. So removing it from the model yields the following: 
+
+```{r, echo=FALSE}
+aov.fit2 = aov(data = data, percentDead ~ gni)
+anova(aov.fit2)
+```
+
+
+
+# Sensitivity Analysis
+
+## Diagnositc Plots
+The above model has the following diagnostic plots.
+```{r, echo=FALSE}
+par(mfrow=c(2,2))
+plot(aov.fit2)
+mtext("Figure 6: Diagnostic Plots of one-way ANOVA",                   # Add main title
+      side = 3,
+      line = - 2,
+      outer = TRUE)
+```
+
+The Normal Q-Q plot shows that the approximate normal distribution of errors assumption may be violated. A Levene Test was carried out with $H_0: E[d_1] = E[d_2] = ... = E[d_r]$ where $d_r = |Y_{ij} - \bar{Y_i}|$ in order to determine if the errors have equal variances.
+
+```{r, echo=FALSE}
+data$res.abs = abs(aov.fit2$residuals)
+summary(aov(res.abs~percentDead, data=data))
+```
+
+Since the test statistic has a p-value $<2e16$ there is sufficient evidence to reject $H_0$, and conclude that the errors do not have equal variance.
+
+## Weighted Least Squares
+To remedy this a model built using weighted least squares, by multiplying the observations by a constant $w_i$ where $w_i = \frac{1}{\sigma^2_i}$ the variance of the error terms becomes a constant This is due to the fact that $var(\sqrt{w_i}e_{ij}) = w_i\sigma^2$. So if $w_i = \frac{1}{\sigma^2}$ then the variance of the error terms will be $1$. In this case since $\sigma^2$ is unknown the sample variance $s^2$ will be used instead.
+
+
+```{r, echo=FALSE}
+s2_low = var(data[which(data$gni == "Low"),]$percentDead)
+s2_mediumLow = var(data[which(data$gni == "Medium_Low"),]$percentDead)
+s2_mediumHigh = var(data[which(data$gni == "Medium_High"),]$percentDead)
+s2_high = var(data[which(data$gni == "High"),]$percentDead)
+
+w=c()
+
+for (i in c(1:nrow(data))){
+  if (data[i,]$gni == "Low"){
+    w[i] = s2_low
+  }
+  else if (data[i,]$gni == "Medium_Low"){
+    w[i] = s2_mediumLow
+  }
+  else if (data[i,]$gni == "Medium_High"){
+    w[i] = s2_mediumHigh
+  }
+  else{
+    w[i] = s2_high
+  }
+}
+
+weighted.fit = aov(data=data, percentDead~gni, weights = w)
+summary(weighted.fit)
+```
+
+
+```{r, echo=FALSE}
+par(mfrow=c(2,2))
+plot(weighted.fit)
+mtext("Figure 7: Diagnostic Plots of Weighted Least Squares",                   # Add main title
+      side = 3,
+      line = - 2,
+      outer = TRUE)
+```
+
+Not only is the effect of GNI on the model is insignificant, but the same model assumptions are still being violated by the weighted least squares model. Therefore, another approach has to be employed to remedy these departures from the normality assumptions. 
+
+## Non-parametric model
+
+By utilizing a non-parametric model, the normality assumptions of the error terms is no longer needed. This non-parametric model is created by replacing the response variable, the Percentage of Population that died to Covid-19, with their ranks. In this case the observation with the smallest Percentage would be replaced with the value 1, and this would continue until the observation with the largest Percentage would be replaced with $n$. The model has the form: 
+$$R_{ij} = \mu + \alpha_i + \epsilon_{i,j}, i = 1,...,4, j = 1,2,...,n_{i}$$
+Where $R_{ij}$ is the rank of the observation, and $\alpha_i$ follows the same restrictions as before. Two rank models were built (1 for GNI and 1 for Literacy Rate), and their diagnostic plots and levels of significance can be seen below. 
+
+```{r, echo=FALSE}
+data$rank.perc = rank(data$percentDead)
+gni.rank.fit = aov(data=data, rank.perc~gni)
+summary(gni.rank.fit)
+
+#par(mfrow=c(2,2))
+#plot(gni.rank.fit)
+#mtext("Figure 6: Diagnostic Plots of non-parametric model for GNI",                   # Add main title
+#      side = 3,
+#      line = - 2,
+#      outer = TRUE)
+
+
+literacy.rank.fit = aov(data=data, rank.perc~literacy)
+summary(literacy.rank.fit)
+
+#par(mfrow=c(2,2))
+#plot(literacy.rank.fit)
+#mtext("Figure 7: Diagnostic Plots of non-parametric model for Literacy Rate",                   # Add main title
+#      side = 3,
+#      line = - 2,
+#      outer = TRUE)
+par(mfrow=c(1,1))
+
+
+```
+
+Both of these rank models have statistically significant effects, and the diagnostic plots aren't necessary because the non-parametric model does not have the necessary assumptions that ANOVA has. The relationship between the treatments and the ranks can be seen in the figures below. 
+
+```{r, echo=FALSE}
+ggplot(data=data, aes(x = gni, y = rank.perc, fill=gni)) + geom_boxplot() + ggtitle("Figure 8: Rank v GNI")
+ggplot(data=data, aes(x = literacy, y = rank.perc, fill=literacy)) + geom_boxplot() + ggtitle("Figure 9: Rank v Literacy Rate")
+```
+
+Finally, a Tukey Test was performed in order to determine of the means of the different levels in the treatment effects are different. The Tukey Test tests the following:
+$$H_0: \mu_1 = ... = \mu_4, H_a: \mu_i \neq \mu_j (i \neq j)$$ 
+```{r, echo=FALSE}
+TukeyHSD(gni.rank.fit, conf.level = 0.95)
+```
+the above Tukey Test shows no significant difference in means between High and Medium-High GNI. But the test does show that $\mu_{Low} < \mu_{Medium-Low} < \mu_{Medium-high} = \mu_{High}$. Therefore concluding that countries with a Low GNI have the lowest Percentage of their Population that died to Covid-19.
+
+```{r, echo=FALSE}
+TukeyHSD(literacy.rank.fit, conf.level = 0.95)
+```
+
+A similar result for the Tukey Test of the Literacy Rate shows $\mu_{Low} < \mu_{Medium} < \mu_{High}$. 
+
+
+# Conclusion
+
+  In order to determine of the GNI and Literacy rate had an effect on the percentage of a country's population a two-way ANOVA model was created, and it was determined that the effect of Literacy Rate on the response was not statistically significant. After it was removed from the model a one-way ANOVA model was created with percentage of population that died to Covid-19 as the response and GNI as the treatment effect. While this model has statistically significant estimators, the normality assumption of the error terms was violated. To remedy this departure, a model was built using weighted least squares and it too violated the normality assumption of the error terms. Finally, a non-parametric model was created with the rank of the percentage dead as the response and GNI as the treatment effect. This model had both statistically a significant treatment effect and there were no major departures from the assumptions required for ANOVA. 
+
+  In conclusion, while the Literacy Rate and the GNI of a country individually have a significant effect on the rank of the Percentage of People that died to Covid-19, where countries with a lower GNI and lower Literacy rate have smaller average ranks. Intuitively, you would think that countries with a higher gross income, and a more educated population would be better prepared to protect its citizens from Covid-19, but these models suggest that this is not the case and the opposite is true. Future studies will need to be conducted in order to determine why this is the case.  
+
+
+# Refrences 
+
+“Schellekens, Philip; Sourrouille, Diego. 2020. COVID-19 Mortality in Rich and Poor Countries : A Tale of Two Pandemics?. Policy Research Working Paper;No. 9260. World Bank, Washington, DC. © World Bank. https://openknowledge.worldbank.org/handle/10986/33844 License: CC BY 3.0 IGO.”
+
+World Health Organization. (n.d.). Covid-19 Dashboard. World Health Organization. Retrieved March 4, 2022, from https://covid19.who.int/table 
+
+GNI per capita, Atlas method (current US$). Data. (n.d.). Retrieved March 4, 2022, from https://data.worldbank.org/indicator/NY.GNP.PCAP.CD 
+
+Abhishek252. (2021, April 14). CIA country dataset for unsupervised learning. Kaggle. Retrieved March 4, 2022, from https://www.kaggle.com/abhishek252/cia-country-dataset-for-unsupervised-learning 
+
+Hamadeh, N., Van Rompaey, C., &amp; Metreau, E. (2021, July 1). New World Bank country classifications by Income Level: 2021-2022. World Bank Blogs. Retrieved March 4, 2022, from https://blogs.worldbank.org/opendata/new-world-bank-country-classifications-income-level-2021-2022
+
+World Population Review. Literacy Rate by Country 2022. Retrieved Mar 4, 2022, from https://worldpopulationreview.com/country-rankings/literacy-rate-by-country
+
+
+# Appendix
+
+```{r, echo=TRUE, eval=FALSE }
+library(knitr) # I recommend doing this here
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+
+setwd("~/Documents/UCDavis/Winter2022/STA207/project/")
+data = read.csv("data/final_data.csv")
+numeric_data = read.csv("data/final_numeric_data.csv")
+
+who = read_csv("https://covid19.who.int/WHO-COVID-19-global-data.csv")
+who_last_day = who[which(who$Date_reported == as.Date("2022-03-02", "%Y-%d-%m")),]
+who_last_day = who_last_day[,c(3,8)] #237 rows
+
+cia = read.csv("data/CIA_Country_Facts.csv")
+gni = gni_raw = read.csv("data/gni.csv", sep=",", header = TRUE)
+
+head(who)
+head(cia)
+head(gni)
+
+c(who_last_day[8,1], cia[8,1])
+c(who_last_day[15,1], cia[15,1], gni[24,1])
+c(who_last_day[227,1], cia[215,1], gni[252,1])
+head(numeric_data[,-3])
+
+gni_five = fivenum(numeric_data$GNI)
+literacy_five = fivenum(numeric_data$Literacy....)
+summary_stats = as.data.frame(rbind(gni_five, literacy_five))
+summary_stats$Mean = c(mean(numeric_data$GNI), mean(numeric_data$Literacy....))
+summary_stats$Std_Dev = c(sd(numeric_data$GNI), sd(numeric_data$Literacy....))
+colnames(summary_stats) = c("Min", "Lower Quartile", "Median", "Upper Quartile", "Max", "Mean", "Standard Deviation")
+summary_stats
+
+ggplot(data=numeric_data, aes(x = GNI)) + geom_histogram() + ggtitle("Figure 1: Histogram of GNI")
+
+ggplot(data=numeric_data, aes(x = Literacy....)) + geom_histogram() + ggtitle("Figure 2: Histogram of Literacy Rate")
+
+table(data$gni, data$literacy)
+
+ggplot(data=data, aes(x = gni, y = percentDead, fill = gni)) + geom_boxplot() + ggtitle("Figure 3: Percentage Dead by GNI")
+
+ggplot(data=data, aes(x = literacy, y = percentDead, fill = literacy)) + geom_boxplot() + ggtitle("Figure 4: Percentage Dead by Literacy Rate")
+
+###################
+
+interaction.plot(x.factor = data$gni, trace.factor = data$literacy, response = data$percentDead, main="Figure 5: Interaction Plot of GNI and Literacy Rate")
+
+aov.fit = aov(data = data, percentDead ~ gni + literacy)
+anova(aov.fit)
+
+aov.fit2 = aov(data = data, percentDead ~ gni)
+anova(aov.fit2)
+
+par(mfrow=c(2,2))
+plot(aov.fit2)
+mtext("Figure 6: Diagnostic Plots of one-way ANOVA",                   # Add main title
+      side = 3,
+      line = - 2,
+      outer = TRUE)
+
+data$res.abs = abs(aov.fit2$residuals)
+summary(aov(res.abs~percentDead, data=data))
+
+s2_low = var(data[which(data$gni == "Low"),]$percentDead)
+s2_mediumLow = var(data[which(data$gni == "Medium_Low"),]$percentDead)
+s2_mediumHigh = var(data[which(data$gni == "Medium_High"),]$percentDead)
+s2_high = var(data[which(data$gni == "High"),]$percentDead)
+
+w=c()
+
+for (i in c(1:nrow(data))){
+  if (data[i,]$gni == "Low"){
+    w[i] = s2_low
+  }
+  else if (data[i,]$gni == "Medium_Low"){
+    w[i] = s2_mediumLow
+  }
+  else if (data[i,]$gni == "Medium_High"){
+    w[i] = s2_mediumHigh
+  }
+  else{
+    w[i] = s2_high
+  }
+}
+
+weighted.fit = aov(data=data, percentDead~gni, weights = w)
+summary(weighted.fit)
+
+
+par(mfrow=c(2,2))
+plot(weighted.fit)
+mtext("Figure 7: Diagnostic Plots of Weighted Least Squares",                   # Add main title
+      side = 3,
+      line = - 2,
+      outer = TRUE)
+
+
+data$rank.perc = rank(data$percentDead)
+gni.rank.fit = aov(data=data, rank.perc~gni)
+summary(gni.rank.fit)
+
+#par(mfrow=c(2,2))
+#plot(gni.rank.fit)
+#mtext("Figure 6: Diagnostic Plots of non-parametric model for GNI",                   # Add main title
+#      side = 3,
+#      line = - 2,
+#      outer = TRUE)
+
+
+literacy.rank.fit = aov(data=data, rank.perc~literacy)
+summary(literacy.rank.fit)
+
+#par(mfrow=c(2,2))
+#plot(literacy.rank.fit)
+#mtext("Figure 7: Diagnostic Plots of non-parametric model for Literacy Rate",                   # Add main title
+#      side = 3,
+#      line = - 2,
+#      outer = TRUE)
+par(mfrow=c(1,1))
+
+ggplot(data=data, aes(x = gni, y = rank.perc, fill=gni)) + geom_boxplot() + ggtitle("Figure 8: Rank v GNI")
+ggplot(data=data, aes(x = literacy, y = rank.perc, fill=literacy)) + geom_boxplot() + ggtitle("Figure 9: Rank v Literacy Rate")
+
+TukeyHSD(gni.rank.fit, conf.level = 0.95)
+TukeyHSD(literacy.rank.fit, conf.level = 0.95)
+```
+
