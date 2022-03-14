@@ -6,7 +6,7 @@
 library(tidyverse)
 library(dplyr)
 
-setwd("~/Documents/UCDavis/Winter2022/STA207/project/")
+#setwd("~/Documents/UCDavis/Winter2022/STA207/project/")
 
 gni_raw = read.csv("data/gni.csv", sep=",", header = TRUE)
 country_gni = gni_raw[,c(1,65)]
